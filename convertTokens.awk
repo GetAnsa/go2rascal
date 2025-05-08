@@ -24,7 +24,7 @@ NF == 1 && tokenType != "" && goType != "" {
     print "\t\treturn " rascalTokenList[idx]
   }
   print "\tdefault:"
-  print "\t\tpanic(fmt.Sprintf(\"unknown" toupper(substr(tokenType, 1, 1)) substr(tokenType, 2) "(\\\"%s\\\"), node.String()))"
+  print "\t\tpanic(fmt.Sprintf(\"unknown" toupper(substr(tokenType, 1, 1)) substr(tokenType, 2) "(\\\"%s\\\")\", node.String()))"
   print "\t}"
   print "}"
   print ""
@@ -38,7 +38,7 @@ NF == 1 && tokenType != "" && goType != "" {
   }
 
   print "\tdefault:"
-  print "\t\tpanic(fmt.Sprintf(\"unknown" toupper(substr(tokenType, 1, 1)) substr(tokenType, 2) "(\\\"%s\\\"), rascal" toupper(substr(tokenType, 1, 1)) substr(tokenType, 2) "))"
+  print "\t\tpanic(fmt.Sprintf(\"unknown" toupper(substr(tokenType, 1, 1)) substr(tokenType, 2) "(\\\"%s\\\")\", rascal" toupper(substr(tokenType, 1, 1)) substr(tokenType, 2) "))"
   print "\t}"
   print "}"
   print ""
@@ -77,7 +77,7 @@ END {
     print "\t\treturn " rascalTokenList[idx]
   }
   print "\tdefault:"
-  print "\t\tpanic(fmt.Sprintf(\"unknown" toupper(substr(tokenType, 1, 1)) substr(tokenType, 2) "(\\\"%s\\\"), node.String()))"
+  print "\t\tpanic(fmt.Sprintf(\"unknown" toupper(substr(tokenType, 1, 1)) substr(tokenType, 2) "(\\\"%s\\\")\", node.String()))"
   print "\t}"
   print "}"
   print ""
@@ -91,7 +91,7 @@ END {
   }
 
   print "\tdefault:"
-  print "\t\tpanic(fmt.Sprintf(\"unknown" toupper(substr(tokenType, 1, 1)) substr(tokenType, 2) "(\\\"%s\\\"), rascal" toupper(substr(tokenType, 1, 1)) substr(tokenType, 2) "))"
+  print "\t\tpanic(fmt.Sprintf(\"unknown" toupper(substr(tokenType, 1, 1)) substr(tokenType, 2) "(\\\"%s\\\")\", rascal" toupper(substr(tokenType, 1, 1)) substr(tokenType, 2) "))"
   print "\t}"
   print "}"
 }

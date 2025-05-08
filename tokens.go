@@ -15,7 +15,7 @@ func branchTypeToRascal(node token.Token) string {
 	case token.CONTINUE:
 		return "continueBranch()"
 	default:
-		panic(fmt.Sprintf("unknownBranchType(\"%s\"), node.String()))
+		panic(fmt.Sprintf("unknownBranchType(\"%s\")", node.String()))
 	}
 }
 
@@ -30,7 +30,7 @@ func rascalBranchTypeToGo(rascalBranchType string) token.Token {
 	case "continueBranch()":
 		return token.CONTINUE
 	default:
-		panic(fmt.Sprintf("unknownBranchType(\"%s\"), rascalBranchType))
+		panic(fmt.Sprintf("unknownBranchType(\"%s\")", rascalBranchType))
 	}
 }
 
@@ -45,7 +45,7 @@ func declTypeToRascal(node token.Token) string {
 	case token.CONST:
 		return "constDecl()"
 	default:
-		panic(fmt.Sprintf("unknownDeclType(\"%s\"), node.String()))
+		panic(fmt.Sprintf("unknownDeclType(\"%s\")", node.String()))
 	}
 }
 
@@ -60,7 +60,7 @@ func rascalDeclTypeToGo(rascalDeclType string) token.Token {
 	case "constDecl()":
 		return token.CONST
 	default:
-		panic(fmt.Sprintf("unknownDeclType(\"%s\"), rascalDeclType))
+		panic(fmt.Sprintf("unknownDeclType(\"%s\")", rascalDeclType))
 	}
 }
 
@@ -95,7 +95,7 @@ func assignmentOpToRascal(node token.Token) string {
 	case token.SUB_ASSIGN:
 		return "subAssign()"
 	default:
-		panic(fmt.Sprintf("unknownAssignmentOp(\"%s\"), node.String()))
+		panic(fmt.Sprintf("unknownAssignmentOp(\"%s\")", node.String()))
 	}
 }
 
@@ -130,7 +130,7 @@ func rascalAssignmentOpToGo(rascalAssignmentOp string) token.Token {
 	case "subAssign()":
 		return token.SUB_ASSIGN
 	default:
-		panic(fmt.Sprintf("unknownAssignmentOp(\"%s\"), rascalAssignmentOp))
+		panic(fmt.Sprintf("unknownAssignmentOp(\"%s\")", rascalAssignmentOp))
 	}
 }
 
@@ -185,7 +185,7 @@ func opToRascal(node token.Token) string {
 	case token.SUB:
 		return "sub()"
 	default:
-		panic(fmt.Sprintf("unknownOp(\"%s\"), node.String()))
+		panic(fmt.Sprintf("unknownOp(\"%s\")", node.String()))
 	}
 }
 
@@ -240,6 +240,6 @@ func rascalOpToGo(rascalOp string) token.Token {
 	case "sub()":
 		return token.SUB
 	default:
-		panic(fmt.Sprintf("unknownOp(\"%s\"), rascalOp))
+		panic(fmt.Sprintf("unknownOp(\"%s\")", rascalOp))
 	}
 }
