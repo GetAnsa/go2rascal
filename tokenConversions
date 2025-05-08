@@ -1,0 +1,58 @@
+branchType
+token.Token
+token.BREAK "breakBranch()"
+token.CONTINUE "continueBranch()"
+token.GOTO "gotoBranch()"
+token.FALLTHROUGH "fallthroughBranch()"
+
+declType
+token.Token
+token.IMPORT "importDecl()"
+token.CONST "constDecl()"
+token.TYPE "typeDecl()"
+token.VAR "varDecl()"
+
+assignmentOp
+token.Token
+token.ADD_ASSIGN "addAssign()"
+token.SUB_ASSIGN "subAssign()"
+token.MUL_ASSIGN "mulAssign()"
+token.QUO_ASSIGN "quoAssign()"
+token.REM_ASSIGN "remAssign()"
+token.AND_ASSIGN "andAssign()"
+token.OR_ASSIGN "orAssign()"
+token.XOR_ASSIGN "xorAssign()"
+token.SHL_ASSIGN "shiftLeftAssign()"
+token.SHR_ASSIGN "shiftRightAssign()"
+token.AND_NOT_ASSIGN "andNotAssign()"
+token.DEFINE "defineAssign()"
+token.ASSIGN "assign()"
+token.ILLEGAL "noKey()"
+
+op
+token.Token
+token.ADD "add()"
+token.SUB "sub()"
+token.MUL "mul()"
+token.QUO "quo()"
+token.REM "rem()"
+token.AND "and()"
+token.OR "or()"
+token.XOR "xor()"
+token.SHL "shiftLeft()"
+token.SHR "shiftRight()"
+token.AND_NOT "andNot()"
+token.LAND "logicalAnd()"
+token.LOR "logicalOr()"
+token.ARROW "arrow()"
+token.INC "inc()"
+token.DEC "dec()"
+token.EQL "equal()"
+token.LSS "lessThan()"
+token.GTR "greaterThan()"
+token.NOT "not()"
+token.NEQ "notEqual()"
+token.LEQ "lessThanEq()"
+token.GEQ "greaterThanEq()"
+token.TILDE "tilde()"
+

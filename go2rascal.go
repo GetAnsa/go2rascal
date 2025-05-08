@@ -9,10 +9,20 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"unicode"
 )
 
 var rascalizer *strings.Replacer = strings.NewReplacer("<", "\\<", ">", "\\>", "\n", "\\n", "\t", "\\t", "\r", "\\r", "\\", "\\\\", "\"", "\\\"", "'", "\\'")
 var filePath string = ""
+
+// Map applies a function to each element of a slice and returns a new slice with the results.
+func Map[T, U any](slice []T, f func(T) U) []U {
+	result := make([]U, len(slice))
+	for i, v := range slice {
+		result[i] = f(v)
+	}
+	return result
+}
 
 // parses file and makes sure there is no error in file input.
 func processFile(addLocs bool) string {
@@ -24,11 +34,189 @@ func processFile(addLocs bool) string {
 	}
 }
 
-func visitFile(node *ast.File, fset *token.FileSet, addLocs bool) string {
-	var decls []string
-	for i := 0; i < len(node.Decls); i++ {
-		decls = append(decls, visitDeclaration(&node.Decls[i], fset, addLocs))
+// RascalNode denotes starting and end position of ident(type) portion and
+// bracketed((|[|{) expression, barrier value of -1 if not applicable to node
+type RascalNode struct {
+	identStartPos   int
+	identEndPos     int
+	bracketStartPos int
+	bracketEndPos   int
+	children        []*RascalNode
+}
+
+func (r RascalNode) inIdent() bool {
+	return r.identStartPos != -1 && r.identEndPos == -1
+}
+
+func (r RascalNode) inBracket() bool {
+	return r.bracketStartPos != -1 && r.bracketEndPos == -1
+}
+
+func (r RascalNode) noIdent() bool {
+	return r.identStartPos == -1
+}
+
+func (r RascalNode) blank() bool {
+	return r.identStartPos == -1 && r.identEndPos == -1 && r.bracketStartPos == -1 && r.bracketEndPos == -1
+}
+
+// todo proper unicode support
+func isWordChar(ch uint8) bool {
+	return unicode.IsLetter(rune(ch)) || unicode.IsDigit(rune(ch)) || ch == '_'
+}
+
+func isBracket(ch uint8) bool {
+	_, ok := bracketMap[ch]
+	return ok
+}
+
+// todo go:generate reverse with sed 's/.*uint8{//' | sed 's/\}$//' | tr ',' '\n' | sed 's/ *\(.*\): *\(.*\)/\2: \1/' | sed "s/: '/:\'/g" | tr '\n' ',' | sed 's/\(.*\)/\tvar reverseBracketMap = map[uint8]uint8{\1}\n/' | sed 's/,,}$/}/'
+var bracketMap = map[uint8]uint8{'(': ')', '{': '}', '[': ']', '<': '>', ':': ':', '"': '"', '\'': '\''}
+
+var reverseBracketMap = map[uint8]uint8{')': '(', '}': '{', ']': '[', '>': '<', ':': ':', '"': '"', '\'': '\''}
+
+type bracketCounter struct {
+	counter    map[uint8]uint
+	totalCount uint
+}
+
+func newBracketCounter() bracketCounter {
+	return bracketCounter{
+		counter: map[uint8]uint{},
 	}
+}
+
+func (b bracketCounter) count(ch uint8) uint {
+	if _, ok := bracketMap[ch]; ok {
+		b.counter[ch]++
+		b.totalCount++
+	} else if _, ok := reverseBracketMap[ch]; ok {
+		b.counter[ch]--
+		b.totalCount--
+	}
+
+	return b.totalCount
+}
+
+var nodeMap map[int]*RascalNode = make(map[int]*RascalNode)
+
+func visitRascalAst(ast string, headPtr uint, tailPtr uint) {
+	var currentNode = RascalNode{
+		identStartPos:   -1,
+		identEndPos:     -1,
+		bracketStartPos: -1,
+		bracketEndPos:   -1,
+	}
+
+	// so the headPtr should either be at the start of an ident or a beginning of a bracket
+	// though after the ident there may be other stuff like = in the case of addLocs
+	for isWordChar(ast[headPtr]) {
+		// not necessary yet but I have a hunch
+		if currentNode.noIdent() {
+			currentNode.identStartPos = int(headPtr)
+		}
+		headPtr++
+		if !isWordChar(ast[headPtr]) {
+			currentNode.identEndPos = int(headPtr - 1)
+		}
+	}
+
+	if isBracket(ast[headPtr]) {
+		// same hunch
+		if !currentNode.inBracket() {
+			currentNode.bracketStartPos = int(headPtr)
+		}
+
+		// this should be the most common (and only??) case where the tailPtr
+		// passed in is already at the closing bracket
+		if ast[tailPtr] == bracketMap[ast[headPtr]] {
+			currentNode.bracketEndPos = int(tailPtr)
+		} else {
+			// probably makes sense to get the commas in this loop and just
+			// opportunistically double check the closing bracket
+			tempSeekPtr := headPtr + 1
+			pda := newBracketCounter()
+			for tempSeekPtr < tailPtr {
+				if isBracket(ast[tempSeekPtr]) {
+					if pda.count(ast[tempSeekPtr]) == 0 && ast[tempSeekPtr] == reverseBracketMap[ast[headPtr]] {
+						currentNode.bracketEndPos = int(tempSeekPtr)
+					}
+				}
+
+				tempSeekPtr++
+			}
+			if tempSeekPtr == tailPtr {
+				panic("mismatched bracket char")
+			}
+		}
+
+	}
+
+}
+
+//func visitRascalAst(ast string, headPtr uint, tailPtr uint) {
+//
+//	//var headPtr, tailPtr = 0, len(ast) - 1
+//
+//	var rootNode = RascalNode{
+//		identStartPos:   -1,
+//		identEndPos:     -1,
+//		bracketStartPos: -1,
+//		bracketEndPos:   -1,
+//	}
+//
+//	var currentNode = rootNode
+//
+//	// todo forgot about commas, 2 pointer solution is busted
+//	// just keep count of open brackets and iterate forward from headPtr
+//	for headPtr < tailPtr {
+//		if (ast[headPtr] >= 'a' && ast[headPtr] <= 'z') ||
+//			(ast[headPtr] >= 'A' && ast[headPtr] <= 'Z') ||
+//			ast[headPtr] >= '0' && ast[headPtr] <= '9' {
+//			if currentNode.blank() {
+//				currentNode.identStartPos = int(headPtr)
+//			} else if currentNode.inIdent() {
+//
+//			}
+//		} else if _, ok := bracketMap[ast[headPtr]]; ok {
+//			if currentNode.inIdent() {
+//				currentNode.identEndPos = int(headPtr - 1)
+//			}
+//			if !currentNode.inBracket() {
+//				currentNode.bracketStartPos = int(headPtr)
+//			}
+//			closingPtr := headPtr + 1
+//			openCount := 0
+//			for closingPtr < tailPtr {
+//				if openCount == 0 && ast[closingPtr] == bracketMap[ast[headPtr]] {
+//					break
+//				} else if ast[closingPtr] == ast[headPtr] {
+//					openCount += 1
+//				} else if ast[closingPtr] == bracketMap[ast[headPtr]] {
+//					openCount -= 1
+//				}
+//				closingPtr++
+//			}
+//			if closingPtr == tailPtr {
+//				panic(fmt.Sprintf("Mismatched %cs at %d", ast[headPtr], headPtr))
+//			}
+//
+//			if ast[closingPtr] == bracketMap[ast[headPtr]] {
+//				currentNode.bracketEndPos = int(closingPtr)
+//			} else {
+//				panic(fmt.Sprintf("Mismatched %cs at %d", ast[headPtr], headPtr))
+//			}
+//			// todo inside the bracket will presumably be some stuff?
+//			// conceivably several stuffs because commas
+//			// also need to handle the locations case
+//		}
+//	}
+//}
+
+func visitFile(node *ast.File, fset *token.FileSet, addLocs bool) string {
+	decls := Map(node.Decls, func(t ast.Decl) string {
+		return visitDeclaration(&t, fset, addLocs)
+	})
 	declString := strings.Join(decls, ",")
 
 	packageName := node.Name.Name
@@ -106,10 +294,9 @@ func outputRascalString(node ast.Node, fset *token.FileSet, typeName string, val
 }
 
 func visitValueSpec(node *ast.ValueSpec, fset *token.FileSet, addLocs bool) string {
-	var names []string
-	for i := 0; i < len(node.Names); i++ {
-		names = append(names, fmt.Sprintf("\"%s\"", node.Names[i].Name))
-	}
+	names := Map(node.Names, func(t *ast.Ident) string {
+		return fmt.Sprintf("\"%s\"", t.Name)
+	})
 	namesStr := fmt.Sprintf("[%s]", strings.Join(names, ","))
 	typeStr := visitOptionExpr(&node.Type, fset, addLocs)
 	values := visitExprList(node.Values, fset, addLocs)
@@ -132,10 +319,9 @@ func visitTypeSpec(node *ast.TypeSpec, fset *token.FileSet, addLocs bool) string
 }
 
 func visitSpecList(nodes []ast.Spec, fset *token.FileSet, addLocs bool) string {
-	var specs []string
-	for i := 0; nodes != nil && i < len(nodes); i++ {
-		specs = append(specs, visitSpec(&nodes[i], fset, addLocs))
-	}
+	specs := Map(nodes, func(t ast.Spec) string {
+		return visitSpec(&t, fset, addLocs)
+	})
 	return fmt.Sprintf("[%s]", strings.Join(specs, ","))
 }
 
@@ -224,6 +410,20 @@ func visitOptionExpr(node *ast.Expr, fset *token.FileSet, addLocs bool) string {
 		return fmt.Sprintf("someExpr(%s)", visitExpr(node, fset, addLocs))
 	}
 }
+
+//func rascalOptionExprToGo(rascalExpr string) *ast.Expr {
+//	if rascalExpr == "noExpr()" {
+//		return nil
+//	} else {
+//		goExpr := rascalExprToGo(
+//			strings.TrimSuffix(
+//				strings.TrimPrefix(rascalExpr, "someExpr("),
+//				")",
+//			),
+//		)
+//		return goExpr
+//	}
+//}
 
 func visitDeclStmt(node *ast.DeclStmt, fset *token.FileSet, addLocs bool) string {
 	declStr := visitDeclaration(&node.Decl, fset, addLocs)
@@ -509,7 +709,6 @@ func visitEllipsis(node *ast.Ellipsis, fset *token.FileSet, addLocs bool) string
 	return outputRascalString(node, fset, "ellipsis", []string{elt}, addLocs)
 }
 
-// todo high level question: Why parse the number literals back rather than using raw value?
 func literalToRascal(node *ast.BasicLit, fset *token.FileSet, addLocs bool) string {
 	switch node.Kind {
 	case token.INT:
@@ -603,7 +802,8 @@ func visitCompositeLit(node *ast.CompositeLit, fset *token.FileSet, addLocs bool
 	)
 }
 
-// todo think about this
+// todo this is definitely going to need to turn into a real part of the grammar if
+// this thing is going to be properly bidirectional
 func visitParenExpr(node *ast.ParenExpr, fset *token.FileSet, addLocs bool) string {
 	// We are building a tree, we do not need to keep explicit parens
 	return visitExpr(&node.X, fset, addLocs)
@@ -704,10 +904,9 @@ func visitOptionBasicLiteral(literal *ast.BasicLit, fset *token.FileSet, addLocs
 }
 
 func fieldToRascal(field *ast.Field, fset *token.FileSet, addLocs bool) string {
-	var names []string
-	for i := 0; field.Names != nil && i < len(field.Names); i++ {
-		names = append(names, fmt.Sprintf("\"%s\"", field.Names[i].Name))
-	}
+	names := Map(field.Names, func(t *ast.Ident) string {
+		return fmt.Sprintf("\"%s\"", t.Name)
+	})
 	namesStr := fmt.Sprintf("[%s]", strings.Join(names, ","))
 	fieldType := visitOptionExpr(&field.Type, fset, addLocs)
 	fieldTag := visitOptionBasicLiteral(field.Tag, fset, addLocs)
@@ -716,10 +915,14 @@ func fieldToRascal(field *ast.Field, fset *token.FileSet, addLocs bool) string {
 }
 
 func visitFieldList(fieldList *ast.FieldList, fset *token.FileSet, addLocs bool) string {
-	var fields []string
-	for i := 0; fieldList != nil && i < len(fieldList.List); i++ {
-		fields = append(fields, fieldToRascal(fieldList.List[i], fset, addLocs))
+	if fieldList == nil {
+		return "[]"
 	}
+
+	fields := Map(fieldList.List, func(t *ast.Field) string {
+		return fieldToRascal(t, fset, addLocs)
+	})
+
 	return fmt.Sprintf("[%s]", strings.Join(fields, ","))
 }
 
@@ -762,6 +965,19 @@ func channelDirToRascal(dir ast.ChanDir) string {
 	}
 }
 
+func rascalChannelDirToGo(dir string) ast.ChanDir {
+	switch dir {
+	case "bidirectional()":
+		return ast.SEND | ast.RECV
+	case "send()":
+		return ast.SEND
+	case "receive()":
+		return ast.RECV
+	default:
+		panic("unknown channel dir")
+	}
+}
+
 func visitChanType(node *ast.ChanType, fset *token.FileSet, addLocs bool) string {
 	value := visitExpr(&node.Value, fset, addLocs)
 	chanSend := channelDirToRascal(node.Dir)
@@ -770,18 +986,16 @@ func visitChanType(node *ast.ChanType, fset *token.FileSet, addLocs bool) string
 }
 
 func visitExprList(nodes []ast.Expr, fset *token.FileSet, addLocs bool) string {
-	var exprs []string
-	for i := 0; nodes != nil && i < len(nodes); i++ {
-		exprs = append(exprs, visitExpr(&nodes[i], fset, addLocs))
-	}
+	exprs := Map(nodes, func(t ast.Expr) string {
+		return visitExpr(&t, fset, addLocs)
+	})
 	return fmt.Sprintf("[%s]", strings.Join(exprs, ","))
 }
 
 func visitStmtList(nodes []ast.Stmt, fset *token.FileSet, addLocs bool) string {
-	var stmts []string
-	for i := 0; nodes != nil && i < len(nodes); i++ {
-		stmts = append(stmts, visitStmt(&nodes[i], fset, addLocs))
-	}
+	stmts := Map(nodes, func(t ast.Stmt) string {
+		return visitStmt(&t, fset, addLocs)
+	})
 
 	return fmt.Sprintf("[%s]", strings.Join(stmts, ","))
 }
@@ -799,126 +1013,6 @@ func computeLocation(fset *token.FileSet, start token.Pos, end token.Pos) string
 	}
 }
 
-func opToRascal(node token.Token) string {
-	switch node {
-	case token.ADD:
-		return "add()"
-	case token.SUB:
-		return "sub()"
-	case token.MUL:
-		return "mul()"
-	case token.QUO:
-		return "quo()"
-	case token.REM:
-		return "rem()"
-	case token.AND:
-		return "and()"
-	case token.OR:
-		return "or()"
-	case token.XOR:
-		return "xor()"
-	case token.SHL:
-		return "shiftLeft()"
-	case token.SHR:
-		return "shiftRight()"
-	case token.AND_NOT:
-		return "andNot()"
-	case token.LAND:
-		return "logicalAnd()"
-	case token.LOR:
-		return "logicalOr()"
-	case token.ARROW:
-		return "arrow()"
-	case token.INC:
-		return "inc()"
-	case token.DEC:
-		return "dec()"
-	case token.EQL:
-		return "equal()"
-	case token.LSS:
-		return "lessThan()"
-	case token.GTR:
-		return "greaterThan()"
-	case token.NOT:
-		return "not()"
-	case token.NEQ:
-		return "notEqual()"
-	case token.LEQ:
-		return "lessThanEq()"
-	case token.GEQ:
-		return "greaterThanEq()"
-	case token.TILDE:
-		return "tilde()"
-	default:
-		return fmt.Sprintf("unknownOp(\"%s\")", node.String())
-	}
-}
-
-func assignmentOpToRascal(node token.Token) string {
-	switch node {
-	case token.ADD_ASSIGN:
-		return "addAssign()"
-	case token.SUB_ASSIGN:
-		return "subAssign()"
-	case token.MUL_ASSIGN:
-		return "mulAssign()"
-	case token.QUO_ASSIGN:
-		return "quoAssign()"
-	case token.REM_ASSIGN:
-		return "remAssign()"
-	case token.AND_ASSIGN:
-		return "andAssign()"
-	case token.OR_ASSIGN:
-		return "orAssign()"
-	case token.XOR_ASSIGN:
-		return "xorAssign()"
-	case token.SHL_ASSIGN:
-		return "shiftLeftAssign()"
-	case token.SHR_ASSIGN:
-		return "shiftRightAssign()"
-	case token.AND_NOT_ASSIGN:
-		return "andNotAssign()"
-	case token.DEFINE:
-		return "defineAssign()"
-	case token.ASSIGN:
-		return "assign()"
-	case token.ILLEGAL:
-		return "noKey()"
-	default:
-		return fmt.Sprintf("unknownAssign(\"%s\")", node.String())
-	}
-}
-
-func branchTypeToRascal(node token.Token) string {
-	switch node {
-	case token.BREAK:
-		return "breakBranch()"
-	case token.CONTINUE:
-		return "continueBranch()"
-	case token.GOTO:
-		return "gotoBranch()"
-	case token.FALLTHROUGH:
-		return "fallthroughBranch()"
-	default:
-		return fmt.Sprintf("unknownBranch(%s)", node.String())
-	}
-}
-
-func declTypeToRascal(node token.Token) string {
-	switch node {
-	case token.IMPORT:
-		return "importDecl()"
-	case token.CONST:
-		return "constDecl()"
-	case token.TYPE:
-		return "typeDecl()"
-	case token.VAR:
-		return "varDecl()"
-	default:
-		return fmt.Sprintf("unknownDecl(%s)", node.String())
-	}
-}
-
 // todo option wrapper is looking pretty non-optional
 func labelToRascal(node *ast.Ident) string {
 	if node != nil {
@@ -928,6 +1022,20 @@ func labelToRascal(node *ast.Ident) string {
 	}
 }
 
+func rascalLabelToGo(rascalIdent string) *ast.Ident {
+	if rascalIdent == "noLabel()" {
+		return nil
+	} else {
+		return &ast.Ident{
+			Name: strings.TrimSuffix(
+				strings.TrimPrefix(rascalIdent, "someLabel("),
+				")",
+			),
+		}
+	}
+}
+
+// todo I could be crazy but I think this is a no-op?
 func rascalizeString(input string) string {
 	//r := strings.NewReplacer("<", "\\<", ">", "\\>", "\n", "\\n", "\t", "\\t", "\r", "\\r", "\\", "\\\\", "\"", "\\\"", "'", "\\'")
 	s1, _ := strings.CutPrefix(input, "\"")
